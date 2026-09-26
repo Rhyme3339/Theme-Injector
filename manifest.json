@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Dark Mode Injector",
-  "version": "1.0.0",
-  "description": "Toggle a dark mode filter on any website, remembered per site.",
+  "name": "Theme Injector",
+  "version": "2.0.0",
+  "description": "Apply Dark, Romance, Sky, Sea, or Magic themes to any website, remembered per site.",
   "permissions": ["storage"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [

@@ -6,31 +6,42 @@ function getHostname(url) {
   }
 }
 
+const buttons = Array.from(document.querySelectorAll('.mode-btn'));
+
+function setActiveButton(mode) {
+  buttons.forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+}
+
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   const tab = tabs[0];
   const hostname = getHostname(tab.url);
   document.getElementById('site').textContent = hostname || 'Unsupported page';
 
   if (!hostname) {
-    document.getElementById('toggle').disabled = true;
+    buttons.forEach((btn) => (btn.disabled = true));
     return;
   }
 
-  chrome.storage.local.get(['darkModeSites'], (result) => {
-    const sites = result.darkModeSites || {};
-    document.getElementById('toggle').checked = !!sites[hostname];
+  chrome.storage.local.get(['siteThemes'], (result) => {
+    const sites = result.siteThemes || {};
+    setActiveButton(sites[hostname] || 'none');
   });
 
-  document.getElementById('toggle').addEventListener('change', (e) => {
-    const enabled = e.target.checked;
-    chrome.storage.local.get(['darkModeSites'], (result) => {
-      const sites = result.darkModeSites || {};
-      sites[hostname] = enabled;
-      chrome.storage.local.set({ darkModeSites: sites }, () => {
-        chrome.tabs.sendMessage(tab.id, {
-          type: 'TOGGLE_DARK_MODE',
-          hostname,
-          enabled,
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      chrome.storage.local.get(['siteThemes'], (result) => {
+        const sites = result.siteThemes || {};
+        sites[hostname] = mode;
+        chrome.storage.local.set({ siteThemes: sites }, () => {
+          setActiveButton(mode);
+          chrome.tabs.sendMessage(tab.id, {
+            type: 'SET_THEME',
+            hostname,
+            mode,
+          });
         });
       });
     });
