@@ -1,41 +1,21 @@
 (function () {
   const FILTER_STYLE_ID = 'cl-dark-mode-style';
   const OVERLAY_ID = 'cl-theme-overlay';
+  const TEXT_STYLE_ATTR = 'data-cl-text-color';
 
-  // Each theme (other than 'dark' and 'none') is a CSS background painted
-  // onto a fixed, click-through overlay div using blend modes + gradients.
+  // Solid (non-blended) overlay colors + forced text color per theme.
+  // Plain alpha overlays always show up, regardless of what's underneath.
   const THEMES = {
-    romance: {
-      blend: 'multiply',
-      background:
-        'radial-gradient(circle at 20% 20%, rgba(255,0,90,0.45), transparent 60%),' +
-        'radial-gradient(circle at 80% 80%, rgba(160,0,40,0.4), transparent 60%),' +
-        'rgba(120,0,30,0.12)',
-    },
-    sky: {
-      blend: 'screen',
-      background:
-        'linear-gradient(180deg, rgba(135,206,250,0.35), rgba(210,245,255,0.15)),' +
-        'radial-gradient(circle at 70% 10%, rgba(255,255,255,0.5), transparent 40%)',
-    },
-    sea: {
-      blend: 'multiply',
-      background:
-        'linear-gradient(160deg, rgba(0,150,136,0.4), rgba(0,90,140,0.3)),' +
-        'radial-gradient(circle at 30% 90%, rgba(0,200,180,0.3), transparent 50%)',
-    },
-    magic: {
-      blend: 'screen',
-      background:
-        'radial-gradient(2px 2px at 10% 20%, #fff, transparent),' +
-        'radial-gradient(2px 2px at 80% 30%, #fff, transparent),' +
-        'radial-gradient(1.5px 1.5px at 50% 70%, #fff, transparent),' +
-        'radial-gradient(1.5px 1.5px at 90% 80%, #fff, transparent),' +
-        'radial-gradient(1px 1px at 25% 85%, #fff, transparent),' +
-        'radial-gradient(1px 1px at 60% 15%, #fff, transparent),' +
-        'linear-gradient(135deg, rgba(148,0,255,0.4), rgba(75,0,130,0.4))',
-    },
+    romance: { overlay: 'rgba(200, 0, 60, 0.5)', text: '#ffffff' },
+    sky: { overlay: 'rgba(135, 206, 250, 0.6)', text: '#ffffff' },
+    sea: { overlay: 'rgba(0, 105, 92, 0.5)', text: '#4CAF50' }, // grassy green text
+    magic: { overlay: 'rgba(106, 13, 173, 0.6)', text: '#ffffff' },
   };
+
+  let currentMode = 'none';
+  let observer = null;
+  const processedRoots = new WeakSet();
+  let debounceTimer = null;
 
   function removeDarkFilter() {
     const styleTag = document.getElementById(FILTER_STYLE_ID);
@@ -63,10 +43,8 @@
     if (overlay) overlay.remove();
   }
 
-  function addOverlay(themeName) {
+  function addOverlay(color) {
     removeOverlay();
-    const theme = THEMES[themeName];
-    if (!theme) return;
     const overlay = document.createElement('div');
     overlay.id = OVERLAY_ID;
     Object.assign(overlay.style, {
@@ -76,19 +54,67 @@
       height: '100vh',
       pointerEvents: 'none',
       zIndex: '2147483647',
-      mixBlendMode: theme.blend,
-      background: theme.background,
+      background: color,
     });
     document.documentElement.appendChild(overlay);
   }
 
+  // Injects a forced-text-color <style> into a root (document or shadow root)
+  // if it doesn't already have one, then recurses into any shadow roots found
+  // inside it. This is what lets the theme reach into web-component-based
+  // sites like YouTube, which wall off their internal markup in shadow DOM.
+  function injectTextColor(root, color) {
+    if (!processedRoots.has(root)) {
+      const style = document.createElement('style');
+      style.setAttribute(TEXT_STYLE_ATTR, 'true');
+      style.textContent = `*, *::before, *::after { color: ${color} !important; }`;
+      root.appendChild(style);
+      processedRoots.add(root);
+    }
+    const all = root.querySelectorAll('*');
+    for (const el of all) {
+      if (el.shadowRoot) injectTextColor(el.shadowRoot, color);
+    }
+  }
+
+  function removeAllTextColorStyles(root) {
+    root.querySelectorAll(`[${TEXT_STYLE_ATTR}]`).forEach((el) => el.remove());
+    root.querySelectorAll('*').forEach((el) => {
+      if (el.shadowRoot) removeAllTextColorStyles(el.shadowRoot);
+    });
+  }
+
+  function startObserving(color) {
+    stopObserving();
+    observer = new MutationObserver(() => {
+      clearTimeout(debounceTimer);
+      // Debounced re-scan: catches new shadow roots created as the page
+      // (e.g. a YouTube SPA navigation) adds new custom elements.
+      debounceTimer = setTimeout(() => injectTextColor(document, color), 600);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  function stopObserving() {
+    if (observer) observer.disconnect();
+    observer = null;
+    clearTimeout(debounceTimer);
+  }
+
   function applyMode(mode) {
+    currentMode = mode;
     removeDarkFilter();
     removeOverlay();
+    removeAllTextColorStyles(document);
+    stopObserving();
+
     if (mode === 'dark') {
       addDarkFilter();
-    } else if (mode && mode !== 'none') {
-      addOverlay(mode);
+    } else if (mode && THEMES[mode]) {
+      const theme = THEMES[mode];
+      addOverlay(theme.overlay);
+      injectTextColor(document, theme.text);
+      startObserving(theme.text);
     }
   }
 
