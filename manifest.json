@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Dark Mode Injector",
+  "version": "1.0.0",
+  "description": "Toggle a dark mode filter on any website, remembered per site.",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
